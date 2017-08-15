@@ -7,6 +7,7 @@
 #include <GL/glew.h>
 #include <SDL_opengl.h>
 
+#include "my_math.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
@@ -16,6 +17,7 @@
 #define STBI_ONLY_PNG
 #include "stb_image.h"
 #pragma GCC diagnostic pop
+
 
 
 
@@ -123,10 +125,11 @@ internal void init(void) {
 const char *vertexShaderSource = "#version 330 core\n"
     "layout (location = 0) in vec2 aPos;\n"
     "layout (location = 1) in vec3 color;\n"
+    "uniform mat4 MVP;\n"
     "out vec3 out_color;\n"
     "void main()\n"
     "{\n"
-    "   gl_Position = vec4(aPos.x, aPos.y, 1.0, 1.0);\n"
+    "   gl_Position = MVP * vec4(aPos.x, aPos.y, 1.0, 1.0);\n"
     "   out_color = color;"
     "}\0";
 const char *fragmentShaderSource = "#version 330 core\n"
@@ -245,6 +248,9 @@ internal Image create_image(const char * path) {
 int main(void) {
     init();
 
+    int screen_offset_x = 0;
+    int screen_offset_y = 0;
+    
     int shader = make_shader(vertexShaderSource, fragmentShaderSource);
     bool quit = false;
     const u8 *keys = SDL_GetKeyboardState(NULL);
@@ -253,8 +259,12 @@ int main(void) {
 
     GLBuffers buf;
     begin_draw(&buf);
-          draw_rectangle(-0.5f, -0.5f, 0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f,  1.0f, 0.8f, 0.4f);
-          draw_triangle(-0.5f, -0.5f, 0.5f, -0.5f, 0.0f, 0.5f, 1.0f, 0.6f, 0.4f);
+          draw_rectangle(0.0f,   SCREEN_HEIGHT - 0.0f,
+                         200.0f, SCREEN_HEIGHT - 0.0f,
+                         200.0f, SCREEN_HEIGHT - 200.0f,
+                         0.0f,   SCREEN_HEIGHT - 200.0f,
+                         1.0f, 0.8f, 0.4f);
+          //draw_triangle(-0.5f, -0.5f, 0.5f, -0.5f, 0.0f, 0.5f, 1.0f, 0.6f, 0.4f);
     end_draw(&buf);
 
 
@@ -265,6 +275,26 @@ int main(void) {
                 quit = true;
             }
         }
+
+        float identity[16] = { 1.0f, 0.0f, 0.0f, 0.0f,
+                               0.0f, 1.0f, 0.0f, 0.0f,
+                               0.0f, 0.0f, 1.0f, 0.0f,
+                               0.0f, 0.0f, 0.0f, 1.0f};
+
+        Matrix4 model = Matrix4MakeWithArray(identity);
+        Matrix4 projection = Matrix4MakeOrtho(0.0f, 1.0f * (float)SCREEN_WIDTH,
+                                              0.0f, 1.0f * (float)SCREEN_HEIGHT,
+                                              -1.0f  * (float)SCREEN_WIDTH, 1.0f  * (float)SCREEN_HEIGHT);
+        Matrix4 view = Matrix4MakeLookAt(0.0f, 0.0f, 200.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+        Matrix4 mvp = Matrix4Multiply(model, Matrix4Multiply(projection, view));
+        mvp = Matrix4Translate(mvp,  screen_offset_x,  screen_offset_y, 0 );
+
+
+        GLint MatrixID = glGetUniformLocation(shader, "MVP");
+        ASSERT(MatrixID >= 0);
+        glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &mvp.m[0]);
+
+        
         glClearColor(1.0, 0.5, 1.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT);
 
