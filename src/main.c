@@ -181,7 +181,7 @@ internal int make_shader(const char * vertex, const char *fragment) {
 internal void addVertexXYRGB(float x, float y, float r, float g, float b) {
     int i = vertex_count;
     vertices[i    ] = x;
-    vertices[i + 1] = y;
+    vertices[i + 1] = SCREEN_HEIGHT - y;
     vertices[i + 2] = r;
     vertices[i + 3] = g;
     vertices[i + 4] = b;
@@ -259,12 +259,15 @@ int main(void) {
 
     GLBuffers buf;
     begin_draw(&buf);
-          draw_rectangle(0.0f,   SCREEN_HEIGHT - 0.0f,
-                         200.0f, SCREEN_HEIGHT - 0.0f,
-                         200.0f, SCREEN_HEIGHT - 200.0f,
-                         0.0f,   SCREEN_HEIGHT - 200.0f,
+          draw_rectangle(0.0f,   0.0f,
+                         200.0f, 0.0f,
+                         200.0f, 200.0f,
+                         0.0f,   200.0f,
                          1.0f, 0.8f, 0.4f);
-          //draw_triangle(-0.5f, -0.5f, 0.5f, -0.5f, 0.0f, 0.5f, 1.0f, 0.6f, 0.4f);
+          draw_triangle(300.0f,  0.0f,
+                        100.0f,  100.0f,
+                        500.0f,  100.0f,
+                        1.0f, 0.6f, 0.4f);
     end_draw(&buf);
 
 
