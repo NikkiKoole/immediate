@@ -3,7 +3,7 @@
 #include <stdbool.h> // bool
 
 #include "SDL.h"
-#include "SDL_mixer.h"
+//#include "SDL_mixer.h"
 #include <GL/glew.h>
 #include <SDL_opengl.h>
 
@@ -40,6 +40,8 @@ typedef bool b32;
 
 global_value SDL_Window *window;
 global_value SDL_GLContext context;
+global_value float vertices[1024];
+global_value int vertex_count = 0;
 
 internal const char *gl_error_string(GLenum error) {
     switch (error) {
@@ -71,11 +73,11 @@ internal void init(void) {
     if (error < 0) {
         printf("%d %s\n", error, SDL_GetError());
     }
-    error = (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048));
-    if (error < 0) {
-        printf("%d %s\n", error, Mix_GetError());
-    }
-    
+    /* error = (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048)); */
+    /* if (error < 0) { */
+    /*     printf("%d %s\n", error, Mix_GetError()); */
+    /* } */
+
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
@@ -108,15 +110,19 @@ internal void init(void) {
 
 const char *vertexShaderSource = "#version 330 core\n"
     "layout (location = 0) in vec2 aPos;\n"
+    "layout (location = 1) in vec3 color;\n"
+    "out vec3 out_color;\n"
     "void main()\n"
     "{\n"
     "   gl_Position = vec4(aPos.x, aPos.y, 1.0, 1.0);\n"
+    "   out_color = color;"
     "}\0";
 const char *fragmentShaderSource = "#version 330 core\n"
+    "in vec3 out_color;\n"
     "out vec4 FragColor;\n"
     "void main()\n"
     "{\n"
-    "   FragColor = vec4(0.4f, 0.5f, 0.2f, 1.0f);\n"
+    "   FragColor = vec4(out_color.r, out_color.g, out_color.b, 1.0f);\n"
     "}\n\0";
 
 
@@ -157,37 +163,88 @@ internal int make_shader(const char * vertex, const char *fragment) {
     return shaderProgram;
 }
 
+
+
+
+internal void addVertexXYRGB(float x, float y, float r, float g, float b) {
+    int i = vertex_count;
+    vertices[i    ] = x;
+    vertices[i + 1] = y;
+    vertices[i + 2] = r;
+    vertices[i + 3] = g;
+    vertices[i + 4] = b;
+    vertex_count += 5;
+}
+
+typedef struct {
+    u32 VAO;
+    u32 VBO;
+} GLBuffers;
+
+internal void begin_draw(GLBuffers * buf) {
+    glGenVertexArrays(1, &buf->VAO);
+    glGenBuffers(1, &buf->VBO);
+    glBindVertexArray(buf->VAO);
+}
+
+internal void end_draw(GLBuffers * buf) {
+    glBindBuffer(GL_ARRAY_BUFFER, buf->VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    //position
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // color attribute
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(2* sizeof(float)));
+    glEnableVertexAttribArray(1);
+    ///////
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
+
+internal void draw_triangle(float x1, float y1, float x2, float y2, float x3, float y3, float r, float g, float b) {
+    addVertexXYRGB(x1, y1, r,g,b);
+    addVertexXYRGB(x2, y2, r,g,b);
+    addVertexXYRGB(x3, y3, r,g,b);
+}
+
+internal void draw_rectangle(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, float r, float g, float b) {
+    addVertexXYRGB(x1, y1, r,g,b);
+    addVertexXYRGB(x2, y2, r,g,b);
+    addVertexXYRGB(x3, y3, r,g,b);
+
+    addVertexXYRGB(x3, y3, r,g,b);
+    addVertexXYRGB(x4, y4, r,g,b);
+    addVertexXYRGB(x1, y1, r,g,b);
+}
+
 int main(void) {
     init();
 
     int shader = make_shader(vertexShaderSource, fragmentShaderSource);
-    
     bool quit = false;
     const u8 *keys = SDL_GetKeyboardState(NULL);
 
-    ////
-    float vertices[] = {
-        -0.5f, -0.5f, // left  
-         0.5f, -0.5f, // right 
-         0.0f,  0.5f  // top   
-    }; 
+    GLBuffers buf;
+    begin_draw(&buf);
+    //draw_triangle(-0.5f, -0.5f, 0.5f, -0.5f, 0.0f, 0.5f, 1.0f, 0.6f, 0.4f);
+          draw_rectangle(-0.5f, -0.5f, 0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f,  1.0f, 0.8f, 0.4f);
+    end_draw(&buf);
 
-    unsigned int VBO, VAO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
 
-    glBindVertexArray(VAO);
+    /* GLBuffers buf2; */
+    /* begin_draw(&buf2); */
+    /*     addVertexXYRGB(-0.25f,  -0.5f,  1.0f, 1.0f, 0.5f); */
+    /*     addVertexXYRGB(0.25f,  -0.5f,  1.0f, 1.0f, 0.5f); */
+    /*     addVertexXYRGB(0.0f,   0.5f,  1.0f, 1.0f, 0.5f); */
 
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    /*     addVertexXYRGB(-0.28f,  -0.8f,  1.0f, 1.0f, 0.5f); */
+    /*     addVertexXYRGB(-0.25f,  -0.2f,  1.0f, 1.0f, 0.5f); */
+    /*     addVertexXYRGB(-0.28f,   -0.1f,  1.0f, 1.0f, 1.0f); */
+    /* end_draw(&buf2); */
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0); 
-    glBindVertexArray(0); 
-    ///////
-    
+
     while (!quit) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
@@ -198,12 +255,17 @@ int main(void) {
         glClearColor(1.0, 0.5, 1.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT);
 
+
         ////////
         glUseProgram(shader);
-        glBindVertexArray(VAO); 
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        glBindVertexArray(buf.VAO);
+        glDrawArrays(GL_TRIANGLES, 0, vertex_count/5);
+
+        //glBindVertexArray(buf2.VAO);
+        //glDrawArrays(GL_TRIANGLES, 0, vertex_count/5);
         ////////
-        
+
         SDL_GL_SwapWindow(window);
     }
 
@@ -211,5 +273,3 @@ int main(void) {
     SDL_DestroyWindow(window);
     SDL_Quit();
 }
-
-
