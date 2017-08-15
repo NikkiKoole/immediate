@@ -7,6 +7,18 @@
 #include <GL/glew.h>
 #include <SDL_opengl.h>
 
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wold-style-definition"
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#include "stb_image.h"
+#pragma GCC diagnostic pop
+
+
+
 #define internal static
 #define global_value
 #define SCREEN_WIDTH 1024
@@ -163,9 +175,6 @@ internal int make_shader(const char * vertex, const char *fragment) {
     return shaderProgram;
 }
 
-
-
-
 internal void addVertexXYRGB(float x, float y, float r, float g, float b) {
     int i = vertex_count;
     vertices[i    ] = x;
@@ -218,31 +227,35 @@ internal void draw_rectangle(float x1, float y1, float x2, float y2, float x3, f
     addVertexXYRGB(x1, y1, r,g,b);
 }
 
+
+typedef struct {
+    s32 width;
+    s32 height;
+    s32 bpp;
+    u8* data;
+} Image;
+
+internal Image create_image(const char * path) {
+    Image result;
+    result.data = stbi_load(path, &result.width, &result.height, &result.bpp, 3 );;
+    return result;
+}
+
+
 int main(void) {
     init();
 
     int shader = make_shader(vertexShaderSource, fragmentShaderSource);
     bool quit = false;
     const u8 *keys = SDL_GetKeyboardState(NULL);
+    Image img = create_image("resources/sprite.png");
+    printf("Image dimensions: %d,%d\n", img.width, img.height);
 
     GLBuffers buf;
     begin_draw(&buf);
-    //draw_triangle(-0.5f, -0.5f, 0.5f, -0.5f, 0.0f, 0.5f, 1.0f, 0.6f, 0.4f);
           draw_rectangle(-0.5f, -0.5f, 0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f,  1.0f, 0.8f, 0.4f);
+          draw_triangle(-0.5f, -0.5f, 0.5f, -0.5f, 0.0f, 0.5f, 1.0f, 0.6f, 0.4f);
     end_draw(&buf);
-
-
-    /* GLBuffers buf2; */
-    /* begin_draw(&buf2); */
-    /*     addVertexXYRGB(-0.25f,  -0.5f,  1.0f, 1.0f, 0.5f); */
-    /*     addVertexXYRGB(0.25f,  -0.5f,  1.0f, 1.0f, 0.5f); */
-    /*     addVertexXYRGB(0.0f,   0.5f,  1.0f, 1.0f, 0.5f); */
-
-    /*     addVertexXYRGB(-0.28f,  -0.8f,  1.0f, 1.0f, 0.5f); */
-    /*     addVertexXYRGB(-0.25f,  -0.2f,  1.0f, 1.0f, 0.5f); */
-    /*     addVertexXYRGB(-0.28f,   -0.1f,  1.0f, 1.0f, 1.0f); */
-    /* end_draw(&buf2); */
-
 
 
     while (!quit) {
@@ -256,15 +269,12 @@ int main(void) {
         glClear(GL_COLOR_BUFFER_BIT);
 
 
-        ////////
         glUseProgram(shader);
 
+        
         glBindVertexArray(buf.VAO);
         glDrawArrays(GL_TRIANGLES, 0, vertex_count/5);
 
-        //glBindVertexArray(buf2.VAO);
-        //glDrawArrays(GL_TRIANGLES, 0, vertex_count/5);
-        ////////
 
         SDL_GL_SwapWindow(window);
     }
