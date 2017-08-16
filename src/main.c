@@ -1,9 +1,9 @@
+
 #include <stdio.h>
 #include <stdint.h>  // int8_t et al.
 #include <stdbool.h> // bool
 
 #include "SDL.h"
-//#include "SDL_mixer.h"
 #include <GL/glew.h>
 #include <SDL_opengl.h>
 
@@ -37,6 +37,14 @@ if (!(expression)) {                                                    \
     printf("%s, function %s, file: %s, line:%d. \n", #expression, __FUNCTION__, __FILE__, __LINE__); \
     exit(0);                                                            \
  }
+#define CHECK()                                                         \
+    {                                                                   \
+        int error = glGetError();                                       \
+        if (error != 0) {                                               \
+            printf("%d, function %s, file: %s, line:%d. \n", error, __FUNCTION__, __FILE__, __LINE__); \
+            exit(0);                                                    \
+        }                                                               \
+    }
 
 typedef int8_t s8;
 typedef int16_t s16;
@@ -56,6 +64,14 @@ global_value SDL_Window *window;
 global_value SDL_GLContext context;
 global_value float vertices[1024];
 global_value int vertex_count = 0;
+global_value Matrix4 mvp;
+
+typedef struct {
+    s32 width;
+    s32 height;
+    s32 bpp;
+    u8* data;
+} Image;
 
 internal const char *gl_error_string(GLenum error) {
     switch (error) {
@@ -140,6 +156,28 @@ const char *fragmentShaderSource = "#version 330 core\n"
     "   FragColor = vec4(out_color.r, out_color.g, out_color.b, 1.0f);\n"
     "}\n\0";
 
+const char *vertexShaderSourceUV = "#version 330 core\n"
+    "layout (location = 0) in vec2 xy;\n"
+    "layout (location = 1) in vec2 uv;\n"
+    "uniform mat4 MVP;\n"
+    "out vec2 out_uv;\n"
+    "void main()\n"
+    "{\n"
+    "	gl_Position =  MVP * vec4(xy, 1.0f, 1.0f);\n"
+    "    out_uv = vec2(uv.x, uv.y);\n"
+    "}\n\0";
+
+const char *fragmentShaderSourceUV = "#version 330 core\n"
+    "in vec2 out_uv;\n"
+    "out vec4 color;\n"
+    "uniform sampler2D sprite_atlas;\n"
+    "void main()\n"
+    "{\n"
+    "	color = texture(sprite_atlas, out_uv);\n"
+    "    if (color.a == 0.0) {\n"
+    "        discard;\n"
+    "    }\n"
+    "}\n";
 
 internal int make_shader(const char * vertex, const char *fragment) {
     int success;
@@ -188,6 +226,16 @@ internal void addVertexXYRGB(float x, float y, float r, float g, float b) {
     vertex_count += 5;
 }
 
+internal void addVertexXYUV(float x, float y, float u, float v) {
+    int i = vertex_count;
+    vertices[i    ] = x;
+    vertices[i + 1] = SCREEN_HEIGHT - y;
+    vertices[i + 2] = u;
+    vertices[i + 3] = v;
+    vertex_count += 4;
+}
+
+
 typedef struct {
     u32 VAO;
     u32 VBO;
@@ -230,45 +278,72 @@ internal void draw_rectangle(float x1, float y1, float x2, float y2, float x3, f
     addVertexXYRGB(x1, y1, r,g,b);
 }
 
+internal void draw_image(Image *img, float x, float y, float width, float height) {
+    UNUSED(img);UNUSED(x);UNUSED(y);UNUSED(width);UNUSED(height);
 
-typedef struct {
-    s32 width;
-    s32 height;
-    s32 bpp;
-    u8* data;
-} Image;
+    addVertexXYUV(1024, 0,   1.0f, 1.0f);
+    addVertexXYUV(1024, 768, 1.0f, 1.0f);
+    addVertexXYUV(0,    768, 1.0f, 1.0f);
+    addVertexXYUV(0,    0,   1.0f, 1.0f);
+}
+
+internal void initMVP(void) {
+    int screen_offset_x = 0;
+    int screen_offset_y = 0;
+    float identity[16] = { 1.0f, 0.0f, 0.0f, 0.0f,
+                           0.0f, 1.0f, 0.0f, 0.0f,
+                           0.0f, 0.0f, 1.0f, 0.0f,
+                           0.0f, 0.0f, 0.0f, 1.0f};
+
+    Matrix4 model = Matrix4MakeWithArray(identity);
+    Matrix4 projection = Matrix4MakeOrtho(0.0f, 1.0f * (float)SCREEN_WIDTH,
+                                          0.0f, 1.0f * (float)SCREEN_HEIGHT,
+                                          -1.0f  * (float)SCREEN_WIDTH, 1.0f  * (float)SCREEN_HEIGHT);
+    Matrix4 view = Matrix4MakeLookAt(0.0f, 0.0f, 200.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+    mvp = Matrix4Multiply(model, Matrix4Multiply(projection, view));
+    mvp = Matrix4Translate(mvp,  screen_offset_x,  screen_offset_y, 0 );
+}
+
+
 
 internal Image create_image(const char * path) {
     Image result;
-    result.data = stbi_load(path, &result.width, &result.height, &result.bpp, 3 );;
+    result.data = stbi_load(path, &result.width, &result.height, &result.bpp, 3 );
     return result;
 }
 
 
+
 int main(void) {
     init();
+    initMVP();
 
-    int screen_offset_x = 0;
-    int screen_offset_y = 0;
-    
-    int shader = make_shader(vertexShaderSource, fragmentShaderSource);
-    bool quit = false;
+    int shader     = make_shader(vertexShaderSource, fragmentShaderSource);
+    int shaderUV   = make_shader(vertexShaderSourceUV, fragmentShaderSourceUV);
+    bool quit      = false;
     const u8 *keys = SDL_GetKeyboardState(NULL);
-    Image img = create_image("resources/sprite.png");
-    printf("Image dimensions: %d,%d\n", img.width, img.height);
+    Image img      = create_image("resources/sprite.png");
 
     GLBuffers buf;
     begin_draw(&buf);
-          draw_rectangle(0.0f,   0.0f,
-                         200.0f, 0.0f,
-                         200.0f, 200.0f,
-                         0.0f,   200.0f,
-                         1.0f, 0.8f, 0.4f);
-          draw_triangle(300.0f,  0.0f,
-                        100.0f,  100.0f,
-                        500.0f,  100.0f,
-                        1.0f, 0.6f, 0.4f);
-    end_draw(&buf);
+
+
+    draw_image(&img, 0, 0, 100, 100);
+
+          glBindBuffer(GL_ARRAY_BUFFER, buf.VBO);
+          glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+          //position
+          glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+          glEnableVertexAttribArray(0);
+          // color attribute
+          glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2* sizeof(float)));
+          glEnableVertexAttribArray(1);
+          ///////
+          glBindBuffer(GL_ARRAY_BUFFER, 0);
+          glBindVertexArray(0);
+    /* end_draw(&buf); */
+
+
 
 
     while (!quit) {
@@ -278,39 +353,38 @@ int main(void) {
                 quit = true;
             }
         }
-
-        float identity[16] = { 1.0f, 0.0f, 0.0f, 0.0f,
-                               0.0f, 1.0f, 0.0f, 0.0f,
-                               0.0f, 0.0f, 1.0f, 0.0f,
-                               0.0f, 0.0f, 0.0f, 1.0f};
-
-        Matrix4 model = Matrix4MakeWithArray(identity);
-        Matrix4 projection = Matrix4MakeOrtho(0.0f, 1.0f * (float)SCREEN_WIDTH,
-                                              0.0f, 1.0f * (float)SCREEN_HEIGHT,
-                                              -1.0f  * (float)SCREEN_WIDTH, 1.0f  * (float)SCREEN_HEIGHT);
-        Matrix4 view = Matrix4MakeLookAt(0.0f, 0.0f, 200.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
-        Matrix4 mvp = Matrix4Multiply(model, Matrix4Multiply(projection, view));
-        mvp = Matrix4Translate(mvp,  screen_offset_x,  screen_offset_y, 0 );
-
-
-        GLint MatrixID = glGetUniformLocation(shader, "MVP");
+        glUseProgram(shaderUV);
+        GLint MatrixID = glGetUniformLocation(shaderUV, "MVP");
         ASSERT(MatrixID >= 0);
         glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &mvp.m[0]);
+        CHECK();
+        u32 texture;
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, img.width, img.height, 0, GL_RGB, GL_UNSIGNED_BYTE, img.data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        CHECK();
 
-        
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glUniform1i(glGetUniformLocation(shaderUV, "sprite_atlas"), 0);
+        CHECK();
+
         glClearColor(1.0, 0.5, 1.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT);
+        CHECK();
 
 
-        glUseProgram(shader);
-
-        
+        //glUseProgram(shaderUV);
         glBindVertexArray(buf.VAO);
-        glDrawArrays(GL_TRIANGLES, 0, vertex_count/5);
+        glDrawArrays(GL_TRIANGLES, 0, vertex_count/4);
+        CHECK();
 
 
         SDL_GL_SwapWindow(window);
-    }
+        }
 
     SDL_GL_DeleteContext(context);
     SDL_DestroyWindow(window);
