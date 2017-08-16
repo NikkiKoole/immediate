@@ -153,7 +153,7 @@ const char *fragmentShaderSource = "#version 330 core\n"
     "out vec4 FragColor;\n"
     "void main()\n"
     "{\n"
-    "   FragColor = vec4(out_color.r, out_color.g, out_color.b, 1.0f);\n"
+    "   FragColor =  vec4(out_color.r, out_color.g, out_color.b, 1.0f);\n"
     "}\n\0";
 
 const char *vertexShaderSourceUV = "#version 330 core\n"
@@ -173,6 +173,7 @@ const char *fragmentShaderSourceUV = "#version 330 core\n"
     "uniform sampler2D sprite_atlas;\n"
     "void main()\n"
     "{\n"
+    "//color = vec4(0.5f, 0.0f, 1.0f, 1.0f);\n"
     "	color = texture(sprite_atlas, out_uv);\n"
     "    if (color.a == 0.0) {\n"
     "        discard;\n"
@@ -251,7 +252,7 @@ internal void end_draw(GLBuffers * buf) {
     glBindBuffer(GL_ARRAY_BUFFER, buf->VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     //position
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
     // color attribute
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(2* sizeof(float)));
@@ -281,10 +282,10 @@ internal void draw_rectangle(float x1, float y1, float x2, float y2, float x3, f
 internal void draw_image(Image *img, float x, float y, float width, float height) {
     UNUSED(img);UNUSED(x);UNUSED(y);UNUSED(width);UNUSED(height);
 
-    addVertexXYUV(1024, 0,   1.0f, 1.0f);
+    addVertexXYUV(1024, 0,   1.0f, 0.0f);
     addVertexXYUV(1024, 768, 1.0f, 1.0f);
-    addVertexXYUV(0,    768, 1.0f, 1.0f);
-    addVertexXYUV(0,    0,   1.0f, 1.0f);
+    addVertexXYUV(0,    768, 0.0f, 1.0f);
+    addVertexXYUV(0,    0,   0.0f, 0.0f);
 }
 
 internal void initMVP(void) {
@@ -308,10 +309,17 @@ internal void initMVP(void) {
 
 internal Image create_image(const char * path) {
     Image result;
-    result.data = stbi_load(path, &result.width, &result.height, &result.bpp, 3 );
+    result.data = stbi_load(path, &result.width, &result.height, &result.bpp,  STBI_rgb_alpha );
     return result;
 }
 
+
+
+
+
+internal void make_texture(void) {
+    //GLuint *tex = 
+}
 
 
 int main(void) {
@@ -323,25 +331,53 @@ int main(void) {
     bool quit      = false;
     const u8 *keys = SDL_GetKeyboardState(NULL);
     Image img      = create_image("resources/sprite.png");
+    GLuint texture;
 
+    
     GLBuffers buf;
-    begin_draw(&buf);
+    /* begin_draw(&buf); */
+    /*       draw_rectangle(0.0f,   0.0f, */
+    /*                      200.0f, 0.0f, */
+    /*                      200.0f, 200.0f, */
+    /*                      0.0f,   200.0f, */
+    /*                      1.0f, 0.8f, 0.4f); */
+    /*       draw_triangle(300.0f,  0.0f, */
+    /*                     100.0f,  100.0f, */
+    /*                     500.0f,  100.0f, */
+    /*                     1.0f, 0.6f, 0.4f); */
+    /* end_draw(&buf); */
 
+
+
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    GLenum colorType = GL_RGBA;
+    glTexImage2D(GL_TEXTURE_2D, 0, colorType, img.width, img.height, 0, colorType, GL_UNSIGNED_BYTE, img.data);
+        
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    CHECK();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(img.data);    
+
+    begin_draw(&buf);
 
     draw_image(&img, 0, 0, 100, 100);
 
-          glBindBuffer(GL_ARRAY_BUFFER, buf.VBO);
-          glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-          //position
-          glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-          glEnableVertexAttribArray(0);
-          // color attribute
-          glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2* sizeof(float)));
-          glEnableVertexAttribArray(1);
-          ///////
-          glBindBuffer(GL_ARRAY_BUFFER, 0);
-          glBindVertexArray(0);
-    /* end_draw(&buf); */
+    glBindBuffer(GL_ARRAY_BUFFER, buf.VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    //position
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // uv attribute
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2* sizeof(float)));
+    glEnableVertexAttribArray(1);
+    ///////
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
 
 
 
@@ -354,32 +390,27 @@ int main(void) {
             }
         }
         glUseProgram(shaderUV);
-        GLint MatrixID = glGetUniformLocation(shaderUV, "MVP");
-        ASSERT(MatrixID >= 0);
-        glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &mvp.m[0]);
+        
+        GLint matrixID = glGetUniformLocation(shaderUV, "MVP");
+        GLint spriteID = glGetUniformLocation(shaderUV, "sprite_atlas");
+        ASSERT(matrixID >= 0);
+        glUniformMatrix4fv(matrixID, 1, GL_FALSE, &mvp.m[0]);
         CHECK();
-        u32 texture;
-        glGenTextures(1, &texture);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, img.width, img.height, 0, GL_RGB, GL_UNSIGNED_BYTE, img.data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        CHECK();
+
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
-        glUniform1i(glGetUniformLocation(shaderUV, "sprite_atlas"), 0);
+        glUniform1i(spriteID, 0);
         CHECK();
 
         glClearColor(1.0, 0.5, 1.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT);
         CHECK();
 
-
-        //glUseProgram(shaderUV);
-        glBindVertexArray(buf.VAO);
+         glBindVertexArray(buf.VAO);
         glDrawArrays(GL_TRIANGLES, 0, vertex_count/4);
+
+
         CHECK();
 
 
