@@ -351,22 +351,23 @@ int main(void) {
 
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
-
-    GLenum colorType = GL_RGBA;
-    glTexImage2D(GL_TEXTURE_2D, 0, colorType, img.width, img.height, 0, colorType, GL_UNSIGNED_BYTE, img.data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.data);
         
-    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.data);
-    glGenerateMipmap(GL_TEXTURE_2D);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    CHECK();
     glBindTexture(GL_TEXTURE_2D, 0);
     stbi_image_free(img.data);    
+
+
+
+
 
     begin_draw(&buf);
 
     draw_image(&img, 0, 0, 100, 100);
 
+
+    
     glBindBuffer(GL_ARRAY_BUFFER, buf.VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     //position
@@ -407,7 +408,7 @@ int main(void) {
         glClear(GL_COLOR_BUFFER_BIT);
         CHECK();
 
-         glBindVertexArray(buf.VAO);
+        glBindVertexArray(buf.VAO);
         glDrawArrays(GL_TRIANGLES, 0, vertex_count/4);
 
 
