@@ -71,6 +71,7 @@ typedef struct {
     s32 height;
     s32 bpp;
     u8* data;
+    GLuint texture;
 } Image;
 
 internal const char *gl_error_string(GLenum error) {
@@ -217,7 +218,7 @@ internal int make_shader(const char * vertex, const char *fragment) {
     return shaderProgram;
 }
 
-internal void addVertexXYRGB(float x, float y, float r, float g, float b) {
+internal void add_vertex_XYRGB(float x, float y, float r, float g, float b) {
     int i = vertex_count;
     vertices[i    ] = x;
     vertices[i + 1] = SCREEN_HEIGHT - y;
@@ -227,7 +228,7 @@ internal void addVertexXYRGB(float x, float y, float r, float g, float b) {
     vertex_count += 5;
 }
 
-internal void addVertexXYUV(float x, float y, float u, float v) {
+internal void add_vertex_XYUV(float x, float y, float u, float v) {
     int i = vertex_count;
     vertices[i    ] = x;
     vertices[i + 1] = SCREEN_HEIGHT - y;
@@ -235,7 +236,6 @@ internal void addVertexXYUV(float x, float y, float u, float v) {
     vertices[i + 3] = v;
     vertex_count += 4;
 }
-
 
 typedef struct {
     u32 VAO;
@@ -261,34 +261,47 @@ internal void end_draw(GLBuffers * buf) {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 }
+internal void end_draw_img(GLBuffers * buf) {
+    glBindBuffer(GL_ARRAY_BUFFER, buf->VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    //position
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // uv attribute
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2* sizeof(float)));
+    glEnableVertexAttribArray(1);
+    ///////
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
 
 
 internal void draw_triangle(float x1, float y1, float x2, float y2, float x3, float y3, float r, float g, float b) {
-    addVertexXYRGB(x1, y1, r,g,b);
-    addVertexXYRGB(x2, y2, r,g,b);
-    addVertexXYRGB(x3, y3, r,g,b);
+    add_vertex_XYRGB(x1, y1, r,g,b);
+    add_vertex_XYRGB(x2, y2, r,g,b);
+    add_vertex_XYRGB(x3, y3, r,g,b);
 }
 
 internal void draw_rectangle(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, float r, float g, float b) {
-    addVertexXYRGB(x1, y1, r,g,b);
-    addVertexXYRGB(x2, y2, r,g,b);
-    addVertexXYRGB(x3, y3, r,g,b);
+    add_vertex_XYRGB(x1, y1, r,g,b);
+    add_vertex_XYRGB(x2, y2, r,g,b);
+    add_vertex_XYRGB(x3, y3, r,g,b);
 
-    addVertexXYRGB(x3, y3, r,g,b);
-    addVertexXYRGB(x4, y4, r,g,b);
-    addVertexXYRGB(x1, y1, r,g,b);
+    add_vertex_XYRGB(x3, y3, r,g,b);
+    add_vertex_XYRGB(x4, y4, r,g,b);
+    add_vertex_XYRGB(x1, y1, r,g,b);
 }
 
 internal void draw_image(Image *img, float x, float y, float width, float height) {
     UNUSED(img);UNUSED(x);UNUSED(y);UNUSED(width);UNUSED(height);
 
-    addVertexXYUV(1024, 0,   1.0f, 0.0f);
-    addVertexXYUV(1024, 768, 1.0f, 1.0f);
-    addVertexXYUV(0,    768, 0.0f, 1.0f);
-    addVertexXYUV(0,    0,   0.0f, 0.0f);
+    add_vertex_XYUV(x,       y,   0.0f, 0.0f);
+    add_vertex_XYUV(x+width, y,   1.0f, 0.0f);
+    add_vertex_XYUV(x+width, y+height, 1.0f, 1.0f);
+    //add_vertex_XYUV(x,       y+height, 0.0f, 1.0f);
 }
 
-internal void initMVP(void) {
+internal void init_MVP(void) {
     int screen_offset_x = 0;
     int screen_offset_y = 0;
     float identity[16] = { 1.0f, 0.0f, 0.0f, 0.0f,
@@ -305,36 +318,37 @@ internal void initMVP(void) {
     mvp = Matrix4Translate(mvp,  screen_offset_x,  screen_offset_y, 0 );
 }
 
-
-
 internal Image create_image(const char * path) {
     Image result;
     result.data = stbi_load(path, &result.width, &result.height, &result.bpp,  STBI_rgb_alpha );
     return result;
 }
 
-
-
-
-
-internal void make_texture(void) {
-    //GLuint *tex = 
+internal void make_texture(Image *img) {
+    glGenTextures(1, &img->texture);
+    glBindTexture(GL_TEXTURE_2D, img->texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img->width, img->height,
+                 0, GL_RGBA, GL_UNSIGNED_BYTE, img->data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(img->data);
 }
 
 
 int main(void) {
     init();
-    initMVP();
+    init_MVP();
 
     int shader     = make_shader(vertexShaderSource, fragmentShaderSource);
     int shaderUV   = make_shader(vertexShaderSourceUV, fragmentShaderSourceUV);
     bool quit      = false;
     const u8 *keys = SDL_GetKeyboardState(NULL);
     Image img      = create_image("resources/sprite.png");
-    GLuint texture;
-
-    
+    make_texture(&img);
     GLBuffers buf;
+
+
     /* begin_draw(&buf); */
     /*       draw_rectangle(0.0f,   0.0f, */
     /*                      200.0f, 0.0f, */
@@ -349,37 +363,16 @@ int main(void) {
 
 
 
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.data);
-        
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(img.data);    
-
-
-
 
 
     begin_draw(&buf);
 
-    draw_image(&img, 0, 0, 100, 100);
+    draw_image(&img, 0, 0, 1024, 768);
+    draw_image(&img, 100,100, 224, 268);
+    draw_image(&img, 500,100, 524, 668);
+    draw_image(&img, 200, 200, 124, 168);
 
-
-    
-    glBindBuffer(GL_ARRAY_BUFFER, buf.VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    //position
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    // uv attribute
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2* sizeof(float)));
-    glEnableVertexAttribArray(1);
-    ///////
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
+    end_draw_img(&buf);
 
 
 
@@ -391,16 +384,15 @@ int main(void) {
             }
         }
         glUseProgram(shaderUV);
-        
+
         GLint matrixID = glGetUniformLocation(shaderUV, "MVP");
         GLint spriteID = glGetUniformLocation(shaderUV, "sprite_atlas");
         ASSERT(matrixID >= 0);
         glUniformMatrix4fv(matrixID, 1, GL_FALSE, &mvp.m[0]);
         CHECK();
 
-
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture);
+        glBindTexture(GL_TEXTURE_2D, img.texture);
         glUniform1i(spriteID, 0);
         CHECK();
 
