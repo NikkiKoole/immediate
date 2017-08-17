@@ -62,7 +62,7 @@ typedef bool b32;
 
 global_value SDL_Window *window;
 global_value SDL_GLContext context;
-global_value float vertices[1024];
+global_value float vertices[1024*1024*128];
 global_value int vertex_count = 0;
 global_value Matrix4 mvp;
 
@@ -262,6 +262,7 @@ internal void end_draw(GLBuffers * buf) {
     glBindVertexArray(0);
 }
 internal void end_draw_img(GLBuffers * buf) {
+    printf("sizeof vertices: %lu  vertex_count: %d\n", sizeof(vertices), vertex_count);
     glBindBuffer(GL_ARRAY_BUFFER, buf->VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     //position
@@ -293,12 +294,18 @@ internal void draw_rectangle(float x1, float y1, float x2, float y2, float x3, f
 }
 
 internal void draw_image(Image *img, float x, float y, float width, float height) {
-    UNUSED(img);UNUSED(x);UNUSED(y);UNUSED(width);UNUSED(height);
+    UNUSED(img);
 
     add_vertex_XYUV(x,       y,   0.0f, 0.0f);
     add_vertex_XYUV(x+width, y,   1.0f, 0.0f);
     add_vertex_XYUV(x+width, y+height, 1.0f, 1.0f);
-    //add_vertex_XYUV(x,       y+height, 0.0f, 1.0f);
+
+    add_vertex_XYUV(x+width, y+height, 1.0f, 1.0f);
+    add_vertex_XYUV(x,       y+height, 0.0f, 1.0f);
+    add_vertex_XYUV(x,       y,   0.0f, 0.0f);
+
+
+
 }
 
 internal void init_MVP(void) {
@@ -335,20 +342,75 @@ internal void make_texture(Image *img) {
     stbi_image_free(img->data);
 }
 
+typedef struct {
+    // All the data i need to do a drawcall for a whole lot of vertices in possible more then 1 array, all using the same shader etc.
+    int shader;
+    Image img;
+    GLBuffers buf;
+    int vertex_count;
+    float vertices[];
+} DrawCall;
+
+
+#define STB_TRUETYPE_IMPLEMENTATION  // force following include to generate implementation
+#include "stb_truetype.h"
+unsigned char ttf_buffer[1<<20];
+unsigned char temp_bitmap[512*512];
+stbtt_bakedchar cdata[96]; // ASCII 32..126 is 95 glyphs
+GLuint ftex;
+
+internal void my_stbtt_initfont(void)
+{
+   fread(ttf_buffer, 1, 1<<20, fopen("resources/Menlo-Regular.ttf", "rb"));
+
+   stbtt_BakeFontBitmap(ttf_buffer,0, 24.0, temp_bitmap,512,512, 32,96, cdata); // no guarantee this fits!
+   // can free ttf_buffer at this point
+   glGenTextures(1, &ftex);
+   glBindTexture(GL_TEXTURE_2D, ftex);
+   //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 512, 512, 0, GL_RGBA, GL_UNSIGNED_BYTE, temp_bitmap);
+
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 512,512, 0, GL_RED, GL_UNSIGNED_BYTE, temp_bitmap);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+}
+
+
+internal void my_stbtt_print(float x, float y, const char *text)
+{
+    while (*text) {
+        //if (*text >= 32 && *text < 128) 
+        //printf("%d\n", *text);
+        stbtt_aligned_quad q;
+        stbtt_GetBakedQuad(cdata, 512,512, *text-32, &x,&y,&q,1);//1=opengl & d3d10+,0=d3d9
+        add_vertex_XYUV(q.x0, q.y1, q.s0, q.t1);
+        add_vertex_XYUV(q.x1, q.y1, q.s1, q.t1);
+        add_vertex_XYUV(q.x1, q.y0, q.s1, q.t0);
+
+        add_vertex_XYUV(q.x1, q.y0, q.s1, q.t0);
+        add_vertex_XYUV(q.x0, q.y0, q.s0, q.t0);
+        add_vertex_XYUV(q.x0, q.y1, q.s0, q.t1);
+        ++text;
+    }
+}
+
 
 int main(void) {
     init();
     init_MVP();
 
-    int shader     = make_shader(vertexShaderSource, fragmentShaderSource);
+    my_stbtt_initfont();
+
+
+    
+    //int shader     = make_shader(vertexShaderSource, fragmentShaderSource);
     int shaderUV   = make_shader(vertexShaderSourceUV, fragmentShaderSourceUV);
     bool quit      = false;
     const u8 *keys = SDL_GetKeyboardState(NULL);
-    Image img      = create_image("resources/sprite.png");
-    make_texture(&img);
+    //Image img      = create_image("resources/sprite.png");
+    //make_texture(&img);
     GLBuffers buf;
 
 
+    
     /* begin_draw(&buf); */
     /*       draw_rectangle(0.0f,   0.0f, */
     /*                      200.0f, 0.0f, */
@@ -361,21 +423,18 @@ int main(void) {
     /*                     1.0f, 0.6f, 0.4f); */
     /* end_draw(&buf); */
 
-
-
-
-
     begin_draw(&buf);
-
-    draw_image(&img, 0, 0, 1024, 768);
-    draw_image(&img, 100,100, 224, 268);
-    draw_image(&img, 500,100, 524, 668);
-    draw_image(&img, 200, 200, 124, 168);
+    for (int x = 0; x < 1000; x++) {
+        for (int y = 0; y < 1000; y++) {
+            //draw_image(&img, (x*7) % 1024, (y*7) % 768, 7, 7);
+        }
+    }
+    my_stbtt_print(10, 40, "Hello Sailor!\n What kind of madness is this?!\n");
+    my_stbtt_print(10, 60, "You almost sound believable, you know?\n");
 
     end_draw_img(&buf);
 
-
-
+    
     while (!quit) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
@@ -383,6 +442,11 @@ int main(void) {
                 quit = true;
             }
         }
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        
         glUseProgram(shaderUV);
 
         GLint matrixID = glGetUniformLocation(shaderUV, "MVP");
@@ -392,7 +456,7 @@ int main(void) {
         CHECK();
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, img.texture);
+        glBindTexture(GL_TEXTURE_2D, ftex);
         glUniform1i(spriteID, 0);
         CHECK();
 
