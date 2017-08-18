@@ -23,7 +23,7 @@
 
 #define internal static
 #define global_value
-#define SCREEN_WIDTH 1024
+#define SCREEN_WIDTH 2000
 #define SCREEN_HEIGHT 768
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
@@ -62,7 +62,7 @@ typedef bool b32;
 
 global_value SDL_Window *window;
 global_value SDL_GLContext context;
-global_value float vertices[1024*1024*128];
+global_value float vertices[1024*1024];
 global_value int vertex_count = 0;
 global_value Matrix4 mvp;
 
@@ -176,6 +176,7 @@ const char *fragmentShaderSourceUV = "#version 330 core\n"
     "{\n"
     "//color = vec4(0.5f, 0.0f, 1.0f, 1.0f);\n"
     "	color = texture(sprite_atlas, out_uv);\n"
+    " if (color.a > 0 && (color.r == 0 && color.g == 0  && color.b == 0)) {color.a=0.0f;} else {color.r = 1.0f;}"
     "    if (color.a == 0.0) {\n"
     "        discard;\n"
     "    }\n"
@@ -363,7 +364,7 @@ internal void my_stbtt_initfont(void)
 {
    fread(ttf_buffer, 1, 1<<20, fopen("resources/Menlo-Regular.ttf", "rb"));
 
-   stbtt_BakeFontBitmap(ttf_buffer,0, 24.0, temp_bitmap,512,512, 32,96, cdata); // no guarantee this fits!
+   stbtt_BakeFontBitmap(ttf_buffer,0, 50.0, temp_bitmap,512,512, 32,96, cdata); // no guarantee this fits!
    // can free ttf_buffer at this point
    glGenTextures(1, &ftex);
    glBindTexture(GL_TEXTURE_2D, ftex);
@@ -377,7 +378,7 @@ internal void my_stbtt_initfont(void)
 internal void my_stbtt_print(float x, float y, const char *text)
 {
     while (*text) {
-        //if (*text >= 32 && *text < 128) 
+        //if (*text >= 32 && *text < 128)
         //printf("%d\n", *text);
         stbtt_aligned_quad q;
         stbtt_GetBakedQuad(cdata, 512,512, *text-32, &x,&y,&q,1);//1=opengl & d3d10+,0=d3d9
@@ -400,7 +401,7 @@ int main(void) {
     my_stbtt_initfont();
 
 
-    
+
     //int shader     = make_shader(vertexShaderSource, fragmentShaderSource);
     int shaderUV   = make_shader(vertexShaderSourceUV, fragmentShaderSourceUV);
     bool quit      = false;
@@ -410,7 +411,7 @@ int main(void) {
     GLBuffers buf;
 
 
-    
+
     /* begin_draw(&buf); */
     /*       draw_rectangle(0.0f,   0.0f, */
     /*                      200.0f, 0.0f, */
@@ -429,12 +430,12 @@ int main(void) {
             //draw_image(&img, (x*7) % 1024, (y*7) % 768, 7, 7);
         }
     }
-    my_stbtt_print(10, 40, "Hello Sailor!\n What kind of madness is this?!\n");
-    my_stbtt_print(10, 60, "You almost sound believable, you know?\n");
+    my_stbtt_print(10, 80, "Hello Sailor!\n What kind of madness is this?!\n");
+    my_stbtt_print(10, 120, "You almost sound believable, you know?\n");
 
     end_draw_img(&buf);
 
-    
+
     while (!quit) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
@@ -446,7 +447,7 @@ int main(void) {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        
+
         glUseProgram(shaderUV);
 
         GLint matrixID = glGetUniformLocation(shaderUV, "MVP");
